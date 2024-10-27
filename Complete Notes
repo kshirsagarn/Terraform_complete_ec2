@@ -1,0 +1,130 @@
+---
+
+# **🛡️ Securely Managing AWS Credentials in Terraform**
+
+### **1. Securing AWS Credentials in Terraform**
+- **Environment Variables**: 
+  - *Set credentials securely*.
+  - ```bash
+    export AWS_ACCESS_KEY_ID="your_access_key"
+    export AWS_SECRET_ACCESS_KEY="your_secret_key"
+    ```
+- **AWS CLI Profile**: 
+  - *Create a profile for security*.
+  - ```bash
+    aws configure --profile myprofile
+    ```
+
+### **2. Terraform Script for AWS Infrastructure**
+- **VPC**: A virtual network for your AWS resources.  
+  *Example*: Private office space.
+- **Subnet**: A range of IPs within the VPC.  
+  *Example*: Departments in an office.
+- **Internet Gateway**: Allows communication between VPC and the internet.  
+  *Example*: Main entrance to your office.
+- **Route Table**: Manages network traffic.  
+  *Example*: Traffic management system.
+- **Security Group**: Controls access to resources.  
+  *Example*: Access control in a building.
+
+---
+
+### **Terraform Script**
+
+```hcl
+provider "aws" {
+  region = "us-east-1"  # AWS region where resources will be created
+}
+
+# Step 1: Create a VPC
+resource "aws_vpc" "ownvpc" {
+  cidr_block = "10.0.0.0/16"  # Define the IP range for the VPC
+  tags = { Name = "ownvpc" }
+}
+
+# Step 2: Create a Subnet
+resource "aws_subnet" "ownsubnet" {
+  vpc_id     = aws_vpc.ownvpc.id
+  cidr_block = "10.0.1.0/24"  # Define the IP range for the subnet
+  tags       = { Name = "own-subnet" }
+}
+
+# Step 3: Create an Internet Gateway
+resource "aws_internet_gateway" "owngw" {
+  vpc_id = aws_vpc.ownvpc.id
+  tags   = { Name = "own-igw" }
+}
+
+# Step 4: Create a Route Table and Associate it with Subnet
+resource "aws_route_table" "my_table" {
+  vpc_id = aws_vpc.ownvpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"  # Route for all outbound traffic
+    gateway_id = aws_internet_gateway.owngw.id
+  }
+
+  tags = { Name = "own-rt" }
+}
+
+resource "aws_route_table_association" "rta_subnet_public" {
+  subnet_id      = aws_subnet.ownsubnet.id
+  route_table_id = aws_route_table.my_table.id
+}
+
+# Step 5: Create a Security Group for HTTP and SSH access
+resource "aws_security_group" "mywebsecurity" {
+  vpc_id      = aws_vpc.ownvpc.id
+  description = "Allow HTTP and SSH inbound traffic"
+
+  ingress {
+    description = "HTTP"  # Allow HTTP traffic
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH"  # Allow SSH traffic
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port        = 0  # Allow all outbound traffic
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = { Name = "mywebserver-sg" }
+}
+
+# Step 6: Launch an EC2 Instance
+resource "aws_instance" "webserver" {
+  ami                         = "ami-06b21ccaeff8cd686"  # Amazon Linux 2 AMI
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.ownsubnet.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.mywebsecurity.id]
+  key_name                    = "key"
+
+  user_data = <<-EOF
+    #!/bin/bash
+    sudo yum install httpd -y
+    sudo systemctl start httpd
+    sudo systemctl enable httpd
+  EOF
+
+  tags = { Name = "tf-1" }
+}
+```
+
+### **Conclusion**
+Using environment variables or AWS profiles for credentials keeps your Terraform configuration secure and clean. The script above shows a safe way to build AWS infrastructure while protecting sensitive data.
+
+---
